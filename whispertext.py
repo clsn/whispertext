@@ -299,50 +299,50 @@ if __name__ == '__main__':
     import re
     tn=Telnet('localhost', port)
     while True:
-#        try:
-        if not thread or not thread.isAlive():
-            thread=threading.Thread(target=keepReading, args=(tn,))
-            thread.start()
-        line=sys.stdin.readline().strip()
-        args=line.split(" ")
-        cmd=args[0]
-        outmsg=None
-        if cmd == 'Login':
-            outmsg=loginmsg(*args[1:])
-        elif cmd == 'Logout':
-            outmsg=logoutmsg
-        elif cmd == 'Friends':
-            outmsg = friendslistmsg
-        elif cmd == 'IM':
-            outmsg = instantMessage(args[1],
-                                    line.split(' ',2)[2])
-        elif cmd == 'Home':
-            outmsg=gohomemsg
-        elif cmd == 'Pong':
-            outmsg=pongmsg
-        elif cmd == 'Location':
-            outmsg=currentLocationmsg
-        elif cmd == 'Search':
-            outmsg=avsearchmsg(line.split(' ',2)[2])
-        elif cmd == 'TPAccept':
-            outmsg=tpacceptmsg(args[1])
-        elif cmd == 'Teleport':
-            outmsg=teleportmsg(args[1], args[2], args[3]) # sim, x, y, z
-        elif cmd == 'TPLure':
-            outmsg=tpluremsg(args[1], line.split(' ',2)[2])
-        elif cmd in ['Quit', 'Exit']:
-            Quit()
-        elif re.match(r'(\d+)Say',cmd):
-            outmsg = chatSend(line.split(' ',1)[1], 
-                              (int(re.match(r'(\d+)Say',cmd).group(1)) or 0))
-        else:
-            print "??"
-            outmsg=cmd          # Escape clause to type whatever we want.
-        if outmsg:
-            outmsg=outmsg.encode('utf-8')
-            print "\t"+outmsg
-            tn.write(outmsg+"\n")
-            print "\n"
-        print "---\n"
-#        except Exception as e:
-#            print "Exception in I/O: " + str(e)
+        try:
+            if not thread or not thread.isAlive():
+                thread=threading.Thread(target=keepReading, args=(tn,))
+                thread.start()
+            line=sys.stdin.readline().strip()
+            args=line.split(" ")
+            cmd=args[0]
+            outmsg=None
+            if cmd == 'Login':
+                outmsg=loginmsg(*args[1:])
+            elif cmd == 'Logout':
+                outmsg=logoutmsg
+            elif cmd == 'Friends':
+                outmsg = friendslistmsg
+            elif cmd == 'IM':
+                outmsg = instantMessage(args[1],
+                                        line.split(' ',2)[2])
+            elif cmd == 'Home':
+                outmsg=gohomemsg
+            elif cmd == 'Pong':
+                outmsg=pongmsg
+            elif cmd == 'Location':
+                outmsg=currentLocationmsg
+            elif cmd == 'Search':
+                outmsg=avsearchmsg(line.split(' ',2)[2])
+            elif cmd == 'TPAccept':
+                outmsg=tpacceptmsg(args[1])
+            elif cmd == 'Teleport':
+                outmsg=teleportmsg(args[1], args[2], args[3]) # sim, x, y, z
+            elif cmd == 'TPLure':
+                outmsg=tpluremsg(args[1], line.split(' ',2)[2])
+            elif cmd in ['Quit', 'Exit']:
+                Quit()
+            elif re.match(r'(\d+)Say',cmd):
+                outmsg = chatSend(line.split(' ',1)[1], 
+                                  (int(re.match(r'(\d+)Say',cmd).group(1)) or 0))
+            else:
+                print "??"
+                outmsg=cmd          # Escape clause to type whatever we want.
+            if outmsg:
+                outmsg=outmsg.encode('utf-8')
+                print "\t"+outmsg
+                tn.write(outmsg+"\n")
+                print "\n"
+            print "---\n"
+        except Exception as e:
+            print "Exception in I/O: " + str(e)
