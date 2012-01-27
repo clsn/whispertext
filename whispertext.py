@@ -18,6 +18,10 @@ pongmsg=data2XML({'Request' : [
 namelist={}
 thread=None
 
+def dataval(tree, tagname):
+    # So many of these are the same, might as well abstract it.
+    return tree.xpathEval('//'+tagname)[0].content
+
 def loginmsg(firstname, lastname, password):
     return data2XML(
         {'Request' : [
@@ -86,6 +90,62 @@ def friendRequest(UUID, message="Will you be my friend?"):
                 ]
          }).toxml()
 
+def profilemsg(UUID):
+    return data2XML(
+        { 'Request' : [
+                { 'Command' : 'AvatarProfile'},
+                { 'Arguments' : 
+                  { 'UUID' : namelist.get(UUID.replace('*', ' '), UUID) }
+                  }
+                ]
+          })
+
+def avsearchmsg(name):
+    return data2XML(
+        { 'Request' : [
+                { 'Command': 'SearchAvatar' },
+                { 'Arguments': 
+                  { 'Name' : name }
+                  }
+                ]
+          })
+
+def tpacceptmsg(name):
+    return data2XML(
+        { 'Request' : [
+                { 'Command': 'TeleportAccept' },
+                { 'Arguments': 
+                  { 'UUID': namelist.get(UUID.replace('*', ' '),UUID) }
+                  }
+                ]
+          })
+
+def teleportmsg(sim, x, y, z):
+    return data2XML(
+        { 'Request' : [
+                { 'Command': 'TeleportLocal'},
+                { 'Arguments': [
+                        { 'X': x },
+                        { 'Y': y },
+                        { 'Z': z },
+                        { 'SimName': sim}
+                        ]
+                  }
+                ]
+          })
+
+def tpluremsg(name, msg):
+    return data2XML(
+        { 'Request' : [
+                { 'Command': 'TeleportLure'},
+                { 'Arguments': [
+                        { 'UUID': namelist.get(UUID.replace('*',' '),UUID) },
+                        { 'Message': msg }
+                        ]
+                  }
+                ]
+          })
+
 currentLocationmsg=data2XML(
     {'Request': [
             {'Command': 'CurrentLocation' },
@@ -107,9 +167,9 @@ def keepReading(tn):
             tn.write(pongmsg+"\n")
 
 def formatChat(tree):
-    msg=tree.xpathEval("//Message")[0].content
-    speaker=tree.xpathEval("//FromName")[0].content
-    sourcetype=tree.xpathEval("//SourceType")[0].content
+    msg=dataval(tree,"Message")
+    speaker=dataval(tree,"FromName")
+    sourcetype=dataval(tree,"SourceType")
     if sourcetype=='Object':
         speaker="(%s)"%speaker
     elif sourcetype=='System':
@@ -126,40 +186,64 @@ def formatFriendsList(tree):
     return "Friends:\n%s"%friendlist
 
 def formatIM(tree):
-    msg=tree.xpathEval("//Message")[0].content
-    speaker=tree.xpathEval("//Name")[0].content
+    msg=dataval(tree,"Message")
+    speaker=dataval(tree,"Name")
     return "[*IM* %s]: %s"%(speaker, msg)
 
 def formatTPoffer(tree):
-    name=tree.xpathEval("//Name")[0].content
-    msg=tree.xpathEval("//Message")[0].content
+    name=dataval(tree,"Name")
+    msg=dataval(tree,"Message")
     return "((%s wants to teleport us somewhere: %s))"%(name, msg)
 
 def formatDisconnect(tree):
-    return "Disconnected: %s (%s)"%(tree.xpathEval("//Reason")[0].content,
-                                    tree.xpathEval("//Message")[0].content)
+    return "Disconnected: %s (%s)"%(dataval(tree,"Reason"),
+                                    dataval(tree,"Message"))
 
 def formatMessageBox(tree):
-    return "]] %s: %s"%(tree.xpathEval("//Severity")[0].content,
-                        tree.xpathEval("//Message")[0].content)
+    return "]] %s: %s"%(dataval(tree,"Severity"),
+                        dataval(tree,"Message"))
 
 def formatGroupMessage(tree):
-    return "(Group message) %s: %s"%(tree.xpathEval("//Name")[0].content,
-                                     tree.xpathEval("//Message")[0].content)
+    return "(Group message) %s: %s"%(dataval(tree,"Name"),
+                                     dataval(tree,"Message"));
 
 def formatGroupNotice(tree):
-    return "((Group Notice)): (%s) %s: %s"%(tree.xpathEval("//Name")[0].content,
-                                            tree.xpathEval("//Subject")[0].content,
-                                            tree.xpathEval("//Message")[0].content)
+    return "((Group Notice)): (%s) %s: %s"%(dataval(tree,"Name"),
+                                            dataval(tree,"Subject"),
+                                            dataval(tree,"Message"))
 
 def formatLocation(tree):
-    return "Location: %s (%s, %s, %s)"%(tree.xpathEval("//SimName")[0].content,
-                                        tree.xpathEval("//X")[0].content,
-                                        tree.xpathEval("//Y")[0].content,
-                                        tree.xpathEval("//Z")[0].content)
+    return "Location: %s (%s, %s, %s)"%(dataval(tree,"SimName"),
+                                        dataval(tree,"X"),
+                                        dataval(tree,"Y"),
+                                        dataval(tree,"Z"))
 
 def formatParcel(tree):
-    return "Parcel: %s"%tree.xpathEval("//Name")[0].content
+    return "Parcel: %s"%dataval(tree,"Name")
+
+def formatProfile(tree):
+    UUID=dataval(tree,"AvatarUUID")
+    name=dataval(tree,"AvatarName")
+    online=dataval(tree,"IsOnline")
+    namelist[name]=UUID
+    return "%s (%s) online: %s"%(name, UUID, online) # That's what I cared about anyway.
+
+def formatAvStatusChange(tree):
+    UUID=dataval(tree,"UUID")
+    name=dataval(tree,"Name")
+    status=dataval(tree,"Status")
+    namelist[name]=UUID
+    return "> %s (%s) is now %s."(name, UUID, status)
+
+def formatAvSearch(tree):
+    rv="Avatar Search Results:\n"
+    for elt in tree.xpathEval("//Result"):
+        name=elt.xpathEval("Name")[0].content
+        UUID=elt.xpathEval("UUID")[0].content
+        namelist[name]=UUID
+        rv+="\t%s (%s)\n"%(name, UUID)
+    return rv
+
 
 def formatDefault(tree):
     return tree.__str__()
@@ -181,11 +265,11 @@ def presentResponse(s):
     resptype=repl[0].content
     handlers={
         'AvatarStatusChange':
-            (lambda tree: "<<"+tree.xpathEval("//Name")[0].content + " is " + \
-                 tree.xpathEval("//Status")[0].content+">>"),
+            (lambda tree: "<<"+dataval(tree,"Name") + " is " + \
+                 dataval(tree,"Status")+">>"),
         'Chat': formatChat,
         'Error':
-            (lambda tree: "!!Error: %s!!"%tree.xpathEval("//Error")[0].content),
+            (lambda tree: "!!Error: %s!!"%dataval(tree,"Error")),
         # Should have side effect of learning UUIDs
         'FriendsList': formatFriendsList,
         'InstantMessage': formatIM,
@@ -198,24 +282,25 @@ def presentResponse(s):
         'GroupNotice': formatGroupNotice,
         'CurrentLocation': formatLocation,
         'CurrentParcel': formatParcel,
+        'AvatarStatusChange': formatAvStatusChange,
+        'AvatarProfile': formatProfile,
         'Ping': (lambda x: ''),
         }
     todo=handlers.get(resptype,formatDefault)
     msg=None
     try:
         msg=todo(tree)
-    except:
-        print "!Exception!: "+s
+    except Exception as e:
+        print "!Exception "+str(e)+"!: "+s
     if msg:
         print '==\n%s\n=='%msg
         
 if __name__ == '__main__':
-    # import re
+    import re
     tn=Telnet('localhost', port)
-    thread=threading.Thread(target=keepReading, args=(tn,))
-    thread.start()
     while True:
-        if thread and not thread.isAlive():
+#        try:
+        if not thread or not thread.isAlive():
             thread=threading.Thread(target=keepReading, args=(tn,))
             thread.start()
         line=sys.stdin.readline().strip()
@@ -228,10 +313,6 @@ if __name__ == '__main__':
             outmsg=logoutmsg
         elif cmd == 'Friends':
             outmsg = friendslistmsg
-        elif cmd == 'Say':
-            outmsg = chatSend(line.split(' ',1)[1])
-        elif cmd == '888Say':
-            outmsg = chatSend(line.split(' ',1)[1], 888)
         elif cmd == 'IM':
             outmsg = instantMessage(args[1],
                                     line.split(' ',2)[2])
@@ -241,8 +322,19 @@ if __name__ == '__main__':
             outmsg=pongmsg
         elif cmd == 'Location':
             outmsg=currentLocationmsg
+        elif cmd == 'Search':
+            outmsg=avsearchmsg(line.split(' ',2)[2])
+        elif cmd == 'TPAccept':
+            outmsg=tpacceptmsg(args[1])
+        elif cmd == 'Teleport':
+            outmsg=teleportmsg(args[1], args[2], args[3]) # sim, x, y, z
+        elif cmd == 'TPLure':
+            outmsg=tpluremsg(args[1], line.split(' ',2)[2])
         elif cmd in ['Quit', 'Exit']:
             Quit()
+        elif re.match(r'(\d+)Say',cmd):
+            outmsg = chatSend(line.split(' ',1)[1], 
+                              (int(re.match(r'(\d+)Say',cmd).group(1)) or 0))
         else:
             print "??"
             outmsg=cmd          # Escape clause to type whatever we want.
@@ -252,4 +344,5 @@ if __name__ == '__main__':
             tn.write(outmsg+"\n")
             print "\n"
         print "---\n"
-
+#        except Exception as e:
+#            print "Exception in I/O: " + str(e)
