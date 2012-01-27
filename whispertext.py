@@ -16,6 +16,7 @@ pongmsg=data2XML({'Request' : [
             { 'Arguments': None } ]}).toxml()
 
 namelist={}
+grouplist={}                    # Maybe eventually useful?
 thread=None
 
 def dataval(tree, tagname):
@@ -180,8 +181,11 @@ def formatChat(tree):
 def formatFriendsList(tree):
     friendlist=''
     for elt in tree.xpathEval("//Friend"):
+        status=elt.xpathEval("Status")[0].content
+        if status == 'Online':
+            status += ' <== ***'
         friendlist+="\t%s\t%s\n"%(elt.xpathEval("Name")[0].content,
-                                  elt.xpathEval("Status")[0].content)
+                                  status)
         namelist[elt.xpathEval("Name")[0].content]= \
             elt.xpathEval("UUID")[0].content
     return "Friends:\n%s"%friendlist
@@ -189,7 +193,7 @@ def formatFriendsList(tree):
 def formatIM(tree):
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"Name")
-    namelist[speaker]=dataval("UUID")
+    namelist[speaker]=dataval(tree,"UUID")
     return "[*IM* %s]: %s"%(speaker, msg)
 
 def formatTPoffer(tree):
@@ -246,6 +250,19 @@ def formatAvSearch(tree):
         rv+="\t%s (%s)\n"%(name, UUID)
     return rv
 
+def formatGroupList(tree):
+    # This shows up on every login, might as well format it.
+    rv="Groups:\n"
+    lineend=False;
+    # Try for a 2-column effect.
+    for elt in tree.xpathEval("//Group"):
+        grouplist[elt.xpathEval("Name")[0].content] = \
+            elt.xpathEval("UUID")[0].content
+        rv+="\t"+elt.xpathEval("Name")[0].content
+        if lineend:
+            rv+="\n"
+        lineend = not lineend
+    return rv
 
 def formatDefault(tree):
     return tree.__str__()
