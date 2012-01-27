@@ -134,13 +134,13 @@ def teleportmsg(sim, x, y, z):
                 ]
           })
 
-def tpluremsg(name, msg):
+def tpluremsg(name, msg="Please join me"):
     return data2XML(
         { 'Request' : [
                 { 'Command': 'TeleportLure'},
                 { 'Arguments': [
                         { 'UUID': namelist.get(UUID.replace('*',' '),UUID) },
-                        { 'Message': msg }
+                        { 'Message': msg or "Please join me" }
                         ]
                   }
                 ]
@@ -188,6 +188,7 @@ def formatFriendsList(tree):
 def formatIM(tree):
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"Name")
+    namelist[speaker]=dataval("UUID")
     return "[*IM* %s]: %s"%(speaker, msg)
 
 def formatTPoffer(tree):
@@ -323,13 +324,14 @@ if __name__ == '__main__':
             elif cmd == 'Location':
                 outmsg=currentLocationmsg
             elif cmd == 'Search':
-                outmsg=avsearchmsg(line.split(' ',2)[2])
+                outmsg=avsearchmsg(line.split(' ',1)[1])
             elif cmd == 'TPAccept':
                 outmsg=tpacceptmsg(args[1])
             elif cmd == 'Teleport':
                 outmsg=teleportmsg(args[1], args[2], args[3]) # sim, x, y, z
             elif cmd == 'TPLure':
-                outmsg=tpluremsg(args[1], line.split(' ',2)[2])
+                # Extending by [''] to prevent exception if not enough data
+                outmsg=tpluremsg(args[1], (line.split(' ',2)+[''])[2])
             elif cmd in ['Quit', 'Exit']:
                 Quit()
             elif re.match(r'(\d+)Say',cmd):
