@@ -94,8 +94,9 @@ def profilemsg(UUID):
     return data2XML(
         { 'Request' : [
                 { 'Command' : 'AvatarProfile'},
-                { 'Arguments' : 
-                  { 'UUID' : namelist.get(UUID.replace('*', ' '), UUID) }
+                { 'Arguments' : [
+                        { 'UUID' : namelist.get(UUID.replace('*', ' '), UUID) }
+                        ]
                   }
                 ]
           })
@@ -105,7 +106,7 @@ def avsearchmsg(name):
         { 'Request' : [
                 { 'Command': 'SearchAvatar' },
                 { 'Arguments': 
-                  { 'Name' : name }
+                  [ { 'Name' : name } ]
                   }
                 ]
           })
@@ -115,7 +116,7 @@ def tpacceptmsg(name):
         { 'Request' : [
                 { 'Command': 'TeleportAccept' },
                 { 'Arguments': 
-                  { 'UUID': namelist.get(UUID.replace('*', ' '),UUID) }
+                  [ { 'UUID': namelist.get(UUID.replace('*', ' '),UUID) } ]
                   }
                 ]
           })
