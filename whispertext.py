@@ -18,6 +18,7 @@ pongmsg=data2XML({'Request' : [
 namelist={}
 grouplist={}                    # Maybe eventually useful?
 thread=None
+logfd=None
 
 def dataval(tree, tagname):
     # So many of these are the same, might as well abstract it.
@@ -274,6 +275,8 @@ def Quit(*args):
     sys.exit(0)
 
 def presentResponse(s):
+    if logfd:
+        logfd.write(s+"\n")
     try:
         tree=parseDoc(s)
     except:
@@ -316,6 +319,17 @@ def presentResponse(s):
         
 if __name__ == '__main__':
     import re
+    from getopt import getopt
+    opts=getopt(sys.args[1:], "l:")[0]
+    logfd=None
+    for opt in opts:
+        if opt[0]=='-l':
+            outname=opt[1]
+            logfd=open(outname,"w") # w+?
+    if not logfd:
+        from datetime import datetime
+        outname=str(datetime.now())
+        logfd=open(outname,"w")
     tn=Telnet('localhost', port)
     while True:
         try:
@@ -352,9 +366,9 @@ if __name__ == '__main__':
                 outmsg=tpluremsg(args[1], (line.split(' ',2)+[''])[2])
             elif cmd in ['Quit', 'Exit']:
                 Quit()
-            elif re.match(r'(\d+)Say',cmd):
+            elif re.match(r'(\d*)Say',cmd):
                 outmsg = chatSend(line.split(' ',1)[1], 
-                                  (int(re.match(r'(\d+)Say',cmd).group(1)) or 0))
+                                  (int(re.match(r'(\d*)Say',cmd).group(1)) or 0))
             else:
                 print "??"
                 outmsg=cmd          # Escape clause to type whatever we want.
@@ -362,6 +376,8 @@ if __name__ == '__main__':
                 outmsg=outmsg.encode('utf-8')
                 print "\t"+outmsg
                 tn.write(outmsg+"\n")
+                if logfd:
+                    logfd.write(outmsg+"\n")
                 print "\n"
             print "---\n"
         except Exception as e:
