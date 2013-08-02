@@ -39,11 +39,17 @@ def Request(command, **args):
         argselt.appendChild(node)
     return doc.toxml()
 
-def loginmsg(firstname, lastname, password):
+##############################################
+# Requests
+##########
+
+def RqLogin(line):
+    # Line should be Firstname Lastname Password
+    args=line.split(' ',2)
     return Request("Login",
-                   FirstName=firstname,
-                   LastName=lastname,
-                   Password="$1$%s"%md5(password).hexdigest(),
+                   FirstName=args[0],
+                   LastName=args[1],
+                   Password="$1$%s"%md5(args[2]).hexdigest(),
                    StartLocation='last',
                    SimName=None,
                    X=None, Y=None, Z=None,
@@ -56,7 +62,8 @@ friendslistmsg=Request('FriendsList')
 
 pongmsg=Request('Pong')
 
-def instantMessage(UUID, message):
+def RqIm(line):
+    [UUID, message]=line.split(' ',1)
     return Request('InstantMessageSend',
                    UUID=namelist.get(UUID.replace("*"," "), UUID),
                    Message=message)
@@ -103,18 +110,9 @@ def acceptTos(firstname, lastname, decision):
                    FirstName=firstname, LastName=lastname,
                    Accept=decision)
 
-def shownamelist():
-    print "Known names: "
-    for (name, uuid) in namelist.iteritems():
-        print "\t%s\t==\t%s"%(name, uuid)
-        print
-
-def keepReading(tn):
-    while True:
-        z=tn.read_until("</Response>") # Block if necessary.
-        presentResponse(z)
-        if z.find("Ping")>=0:
-            tn.write(pongmsg+"\n")
+##########################################################
+# Responses
+###########
 
 def formatChat(tree):
     msg=dataval(tree,"Message")
@@ -215,6 +213,21 @@ def formatGroupList(tree):
 def formatDefault(tree):
     return tree.__str__()
 
+##########################################################
+
+def shownamelist():
+    print "Known names: "
+    for (name, uuid) in namelist.iteritems():
+        print "\t%s\t==\t%s"%(name, uuid)
+        print
+
+def keepReading(tn):
+    while True:
+        z=tn.read_until("</Response>") # Block if necessary.
+        presentResponse(z)
+        if z.find("Ping")>=0:
+            tn.write(pongmsg+"\n")
+
 def Quit(*args):
     import sys
     print "Exiting, right??"
@@ -242,6 +255,7 @@ def presentResponse(s):
         # Should have side effect of learning UUIDs
         'FriendsList': formatFriendsList,
         'InstantMessage': formatIM,
+        'GroupList': formatGroupList,
         'TeleportOffer': formatTPoffer,
         # Trap this mostly so we can at least silence it.
         'TypingStatusChange': (lambda x: ''),
@@ -283,14 +297,18 @@ if __name__ == '__main__':
             if not thread or not thread.isAlive():
                 thread=threading.Thread(target=keepReading, args=(tn,))
                 thread.start()
-            line=sys.stdin.readline().strip()
+            line=sys.stdin.readline() # no strip; trailing spaces might be needed.
+            # But lose the newline.
+            line=line[:-1]
             args=line.split(" ")
             cmd=args[0]
 	    # Extend by '' to avoid exception if too short.
+            rest=(line.split(' ',1)+[''])[1]
 	    linetail=(line.split(" ",2)+['',''])[2]
             outmsg=None
-            if cmd == 'Login':
-                outmsg=loginmsg(*args[1:])
+            rq="Rq"+cmd.title()
+            if globals().has_key(rq):
+                outmsg=(globals()[rq])(rest)
             elif cmd == 'namelist': # lowercase: local command.
                 shownamelist()
                 continue
@@ -298,8 +316,6 @@ if __name__ == '__main__':
                 outmsg=logoutmsg
             elif cmd == 'Friends':
                 outmsg = friendslistmsg
-            elif cmd == 'IM':
-                outmsg = instantMessage(args[1],linetail)
             elif cmd == 'Home':
                 outmsg=gohomemsg
             elif cmd == 'Pong':
