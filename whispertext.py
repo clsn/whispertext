@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from data2XML import data2XML
 import os, threading
 import sys
 from telnetlib import Telnet
@@ -11,10 +10,6 @@ from libxml2 import parseDoc
 
 port=8338                       # Insecure connections.  I'm an insecure guy.
 
-pongmsg=data2XML({'Request' : [
-            { 'Command' : "Pong" },
-            { 'Arguments': None } ]}).toxml()
-
 namelist={}
 grouplist={}                    # Maybe eventually useful?
 thread=None
@@ -24,143 +19,95 @@ def dataval(tree, tagname):
     # So many of these are the same, might as well abstract it.
     return tree.xpathEval('//'+tagname)[0].content
 
+
+from xml.dom.minidom import getDOMImplementation
+
+domimpl=getDOMImplementation()
+def Request(command, **args):
+    doc=domimpl.createDocument(None, "Request", None)
+    cmd=doc.createElement('Command')
+    txt=doc.createTextNode(command)
+    cmd.appendChild(txt)
+    doc.documentElement.appendChild(cmd)
+    argselt=doc.createElement('Arguments')
+    doc.documentElement.appendChild(argselt)
+    for (arg, value) in args.iteritems():
+        node=doc.createElement(arg)
+        if value is not None:
+            txt=doc.createTextNode(str(value))
+            node.appendChild(txt)
+        argselt.appendChild(node)
+    return doc.toxml()
+
 def loginmsg(firstname, lastname, password):
-    return data2XML(
-        {'Request' : [
-                { 'Command' : 'Login' },
-                { 'Arguments' : [
-                        { 'FirstName': firstname },
-                        { 'LastName' : lastname },
-                        { 'Password' : "$1$%s"%md5(password).hexdigest() },
-                        { 'StartLocation' : 'last' },
-                        { 'SimName' : None },
-                        { 'X' : None },
-                        { 'Y' : None },
-                        { 'Z' : None },
-                        { 'ClientName' : 'Whispering Fingers' }
-                        ]
-                  }
-                ]
-         }).toxml()
+    return Request("Login",
+                   FirstName=firstname,
+                   LastName=lastname,
+                   Password="$1$%s"%md5(password).hexdigest(),
+                   StartLocation='last',
+                   SimName=None,
+                   X=None, Y=None, Z=None,
+                   ClientName='Whispering Fingers')
 
-logoutmsg=data2XML({'Request' : [
-            { 'Command' : 'Logout' },
-            { 'Arguments' : None }
-            ]}).toxml()
 
-friendslistmsg=data2XML(
-    {'Request' : [
-            {'Command' : 'FriendsList'},
-            {'Arguments': None }
-            ]
-     }).toxml()
+logoutmsg=Request('Logout')
+
+friendslistmsg=Request('FriendsList')
+
+pongmsg=Request('Pong')
 
 def instantMessage(UUID, message):
-    return data2XML(
-        {'Request': [
-                { 'Command': 'InstantMessageSend' },
-                { 'Arguments' : [
-                        { 'UUID': namelist.get(UUID.replace("*"," "), UUID) },
-                        { 'Message': message }
-                        ]
-                  }
-                ]
-         }).toxml()
+    return Request('InstantMessageSend',
+                   UUID=namelist.get(UUID.replace("*"," "), UUID),
+                   Message=message)
 
 def chatSend(message, channel=0):
-    return data2XML(
-        {'Request': [
-                { 'Command' : 'ChatSend'},
-                { 'Arguments' : [
-                        { 'Message': message },
-                        { 'Channel': channel },
-                        { 'ChatType': 'Normal' }
-                        ]
-                  }
-                ]
-         }).toxml()
+    return Request('ChatSend',
+                   Message=message,
+                   Channel=channel,
+                   ChatType='normal')
 
 def friendRequest(UUID, message="Will you be my friend?"):
-    return data2XML(
-        {'Request': [
-                { 'Command' : 'FriendRequest' },
-                { 'Arguments' : [
-                        { 'UUID' : UUID },
-                        { 'Message': message}
-                        ]
-                  }
-                ]
-         }).toxml()
+    return Request('FriendRequest',
+                   UUID=UUID,
+                   Message=message)
 
-def profilemsg(UUID):
-    return data2XML(
-        { 'Request' : [
-                { 'Command' : 'AvatarProfile'},
-                { 'Arguments' : [
-                        { 'UUID' : namelist.get(UUID.replace('*', ' '), UUID) }
-                        ]
-                  }
-                ]
-          })
+def avatarProfile(UUID):
+    return Request('AvatarProfile',
+                   UUID=namelist.get(UUID.replace('*',' '),UUID))
 
 def avsearchmsg(name):
-    return data2XML(
-        { 'Request' : [
-                { 'Command': 'SearchAvatar' },
-                { 'Arguments': 
-                  [ { 'Name' : name } ]
-                  }
-                ]
-          })
+    return Request('SearchAvatar',
+                   Name=name)
 
 def tpacceptmsg(name):
-    return data2XML(
-        { 'Request' : [
-                { 'Command': 'TeleportAccept' },
-                { 'Arguments': 
-                  [ { 'UUID': namelist.get(UUID.replace('*', ' '),UUID) } ]
-                  }
-                ]
-          })
+    return Request('TeleportAccept',
+                   UUID=namelist.get(UUID.replace('*', ' '),UUID))
 
 def teleportmsg(sim, x, y, z):
-    return data2XML(
-        { 'Request' : [
-                { 'Command': 'TeleportLocal'},
-                { 'Arguments': [
-                        { 'X': x },
-                        { 'Y': y },
-                        { 'Z': z },
-                        { 'SimName': sim}
-                        ]
-                  }
-                ]
-          })
+    return Request('TeleportLocal',
+                   X=x, Y=y, Z=z,
+                   SimName=sim)
 
-def tpluremsg(name, msg="Please join me"):
-    return data2XML(
-        { 'Request' : [
-                { 'Command': 'TeleportLure'},
-                { 'Arguments': [
-                        { 'UUID': namelist.get(UUID.replace('*',' '),UUID) },
-                        { 'Message': msg or "Please join me" }
-                        ]
-                  }
-                ]
-          })
+def tpluremsg(UUID, msg="Please join me"):
+    return Request('TeleportLure',
+                   UUID=namelist.get(UUID.replace('*',' '),UUID),
+                   Message=(msg or 'Please join me'))
 
-currentLocationmsg=data2XML(
-    {'Request': [
-            {'Command': 'CurrentLocation' },
-            {'Arguments': None}
-            ]}).toxml()
+currentLocationmsg=Request('CurrentLocation')
 
-gohomemsg=data2XML(
-    {'Request': [
-            { 'Command': 'TeleportHome' },
-            { 'Arguments': None}
-            ]}).toxml()
+gohomemsg=Request('TeleportHome')
 
+def acceptTos(firstname, lastname, decision):
+    return Request('AcceptTos',
+                   FirstName=firstname, LastName=lastname,
+                   Accept=decision)
+
+def shownamelist():
+    print "Known names: "
+    for (name, uuid) in namelist.iteritems():
+        print "\t%s\t==\t%s"%(name, uuid)
+        print
 
 def keepReading(tn):
     while True:
@@ -270,7 +217,7 @@ def formatDefault(tree):
 
 def Quit(*args):
     import sys
-    print "Exitting, right??"
+    print "Exiting, right??"
     os.kill(os.getpid(),1)
     sys.exit(0)
 
@@ -320,7 +267,7 @@ def presentResponse(s):
 if __name__ == '__main__':
     import re
     from getopt import getopt
-    opts=getopt(sys.args[1:], "l:")[0]
+    opts=getopt(sys.argv[1:], "l:")[0]
     logfd=None
     for opt in opts:
         if opt[0]=='-l':
@@ -339,16 +286,20 @@ if __name__ == '__main__':
             line=sys.stdin.readline().strip()
             args=line.split(" ")
             cmd=args[0]
+	    # Extend by '' to avoid exception if too short.
+	    linetail=(line.split(" ",2)+['',''])[2]
             outmsg=None
             if cmd == 'Login':
                 outmsg=loginmsg(*args[1:])
+            elif cmd == 'namelist': # lowercase: local command.
+                shownamelist()
+                continue
             elif cmd == 'Logout':
                 outmsg=logoutmsg
             elif cmd == 'Friends':
                 outmsg = friendslistmsg
             elif cmd == 'IM':
-                outmsg = instantMessage(args[1],
-                                        line.split(' ',2)[2])
+                outmsg = instantMessage(args[1],linetail)
             elif cmd == 'Home':
                 outmsg=gohomemsg
             elif cmd == 'Pong':
@@ -360,10 +311,12 @@ if __name__ == '__main__':
             elif cmd == 'TPAccept':
                 outmsg=tpacceptmsg(args[1])
             elif cmd == 'Teleport':
-                outmsg=teleportmsg(args[1], args[2], args[3]) # sim, x, y, z
+                outmsg=teleportmsg(args[1], args[2], args[3], args[4]) # sim, x, y, z
             elif cmd == 'TPLure':
                 # Extending by [''] to prevent exception if not enough data
-                outmsg=tpluremsg(args[1], (line.split(' ',2)+[''])[2])
+                outmsg=tpluremsg(args[1], linetail)
+            elif cmd == 'AcceptTos':
+                outmsg=acceptTos(args[1], args[2], args[3])
             elif cmd in ['Quit', 'Exit']:
                 Quit()
             elif re.match(r'(\d*)Say',cmd):
@@ -382,3 +335,5 @@ if __name__ == '__main__':
             print "---\n"
         except Exception as e:
             print "Exception in I/O: " + str(e)
+        except KeyboardInterrupt as e:
+            print "Keyboard Interrupt: "+str(e)
