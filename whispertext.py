@@ -61,15 +61,17 @@ def RqLogout(line):
     "Logout"
     return Request('Logout')
 
-friendslistmsg=Request('FriendsList')
+def RqFriends(line):
+    return Request('FriendsList')
 
-pongmsg=Request('Pong')
+def RqPong(line):
+    return Request('Pong')
 
 def RqIm(line):
     "Im UUID Message\nIf a name is used instead of UUID, use firstname.lastname"
     [UUID, message]=line.split(' ',1)
     return Request('InstantMessageSend',
-                   UUID=namelist.get(UUID.replace("*"," "), UUID),
+                   UUID=namelist.get(UUID.replace("."," "), UUID),
                    Message=message)
 
 def chatSend(message, channel=0):
@@ -112,9 +114,11 @@ def RqTplure(line):
                    UUID=namelist.get(name.replace('.',' '),name),
                    Message=(msg or 'Please join me'))
 
-currentLocationmsg=Request('CurrentLocation')
+def RqLocation(line):
+    return Request('CurrentLocation')
 
-gohomemsg=Request('TeleportHome')
+def RqHome(line):
+    return Request('TeleportHome')
 
 def RqAccepttos(line):
     "Accepttos firstname lastname true/false"
@@ -127,7 +131,7 @@ def RqAccepttos(line):
 # Responses
 ###########
 
-def formatChat(tree):
+def RespChat(tree):
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"FromName")
     sourcetype=dataval(tree,"SourceType")
@@ -137,7 +141,7 @@ def formatChat(tree):
         speaker='<%s>'%speaker
     return '[%s]: %s'%(speaker,msg)
 
-def formatFriendsList(tree):
+def RespFriendsList(tree):
     friendlist=''
     for elt in tree.xpathEval("//Friend"):
         status=elt.xpathEval("Status")[0].content
@@ -149,58 +153,58 @@ def formatFriendsList(tree):
             elt.xpathEval("UUID")[0].content
     return "Friends:\n%s"%friendlist
 
-def formatIM(tree):
+def RespInstantMessage(tree):
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"Name")
     namelist[speaker]=dataval(tree,"UUID")
     return "[*IM* %s]: %s"%(speaker, msg)
 
-def formatTPoffer(tree):
+def RespTeleportOffer(tree):
     name=dataval(tree,"Name")
     msg=dataval(tree,"Message")
     return "((%s wants to teleport us somewhere: %s))"%(name, msg)
 
-def formatDisconnect(tree):
+def RespDisconnect(tree):
     return "Disconnected: %s (%s)"%(dataval(tree,"Reason"),
                                     dataval(tree,"Message"))
 
-def formatMessageBox(tree):
+def RespMessageBox(tree):
     return "]] %s: %s"%(dataval(tree,"Severity"),
                         dataval(tree,"Message"))
 
-def formatGroupMessage(tree):
+def RespGroupMessage(tree):
     return "(Group message) %s: %s"%(dataval(tree,"Name"),
                                      dataval(tree,"Message"));
 
-def formatGroupNotice(tree):
+def RespGroupNotice(tree):
     return "((Group Notice)): (%s) %s: %s"%(dataval(tree,"Name"),
                                             dataval(tree,"Subject"),
                                             dataval(tree,"Message"))
 
-def formatLocation(tree):
+def RespCurrentLocation(tree):
     return "Location: %s (%s, %s, %s)"%(dataval(tree,"SimName"),
                                         dataval(tree,"X"),
                                         dataval(tree,"Y"),
                                         dataval(tree,"Z"))
 
-def formatParcel(tree):
+def RespCurrentParcel(tree):
     return "Parcel: %s"%dataval(tree,"Name")
 
-def formatProfile(tree):
+def RespAvatarProfile(tree):
     UUID=dataval(tree,"AvatarUUID")
     name=dataval(tree,"AvatarName")
     online=dataval(tree,"IsOnline")
     namelist[name]=UUID
     return "%s (%s) online: %s"%(name, UUID, online) # That's what I cared about anyway.
 
-def formatAvStatusChange(tree):
+def RespAvatarStatusChange(tree):
     UUID=dataval(tree,"UUID")
     name=dataval(tree,"Name")
     status=dataval(tree,"Status")
     namelist[name]=UUID
-    return "> %s (%s) is now %s."(name, UUID, status)
+    return "> %s (%s) is now %s."%(name, UUID, status)
 
-def formatAvSearch(tree):
+def RespAvatarSearchResult(tree):
     rv="Avatar Search Results:\n"
     for elt in tree.xpathEval("//Result"):
         name=elt.xpathEval("Name")[0].content
@@ -209,7 +213,7 @@ def formatAvSearch(tree):
         rv+="\t%s (%s)\n"%(name, UUID)
     return rv
 
-def formatGroupList(tree):
+def RespGroupList(tree):
     # This shows up on every login, might as well format it.
     rv="Groups:\n"
     lineend=False;
@@ -239,7 +243,7 @@ def keepReading(tn):
         z=tn.read_until("</Response>") # Block if necessary.
         presentResponse(z)
         if z.find("Ping")>=0:
-            tn.write(pongmsg+"\n")
+            tn.write(RqPong(None)+"\n")
 
 def Quit(*args):
     import sys
@@ -259,30 +263,16 @@ def presentResponse(s):
         return "!!! Unknown Message\n"+s+"!!!"
     resptype=repl[0].content
     handlers={
-        'AvatarStatusChange':
-            (lambda tree: "<<"+dataval(tree,"Name") + " is " + \
-                 dataval(tree,"Status")+">>"),
-        'Chat': formatChat,
         'Error':
             (lambda tree: "!!Error: %s!!"%dataval(tree,"Error")),
         # Should have side effect of learning UUIDs
-        'FriendsList': formatFriendsList,
-        'InstantMessage': formatIM,
-        'GroupList': formatGroupList,
-        'TeleportOffer': formatTPoffer,
-        # Trap this mostly so we can at least silence it.
         'TypingStatusChange': (lambda x: ''),
-        'Disconnect': formatDisconnect,
-        'MessageBox': formatMessageBox,
-        'GroupMessage': formatGroupMessage,
-        'GroupNotice': formatGroupNotice,
-        'CurrentLocation': formatLocation,
-        'CurrentParcel': formatParcel,
-        'AvatarStatusChange': formatAvStatusChange,
-        'AvatarProfile': formatProfile,
         'Ping': (lambda x: ''),
         }
-    todo=handlers.get(resptype,formatDefault)
+    if globals().has_key("Resp"+resptype):
+        todo=globals()["Resp"+resptype]
+    else:
+        todo=handlers.get(resptype,formatDefault)
     msg=None
     try:
         msg=todo(tree)
@@ -336,14 +326,6 @@ if __name__ == '__main__':
             elif cmd == 'namelist':
                 shownamelist()
                 continue
-            elif cmd == 'Friends':
-                outmsg = friendslistmsg
-            elif cmd == 'Home':
-                outmsg=gohomemsg
-            elif cmd == 'Pong':
-                outmsg=pongmsg
-            elif cmd == 'Location':
-                outmsg=currentLocationmsg
             elif cmd in ['Quit', 'Exit', 'quit', 'exit']:
                     Quit()
             elif cmd == 'Say':
