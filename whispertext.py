@@ -5,6 +5,7 @@ import sys
 from telnetlib import Telnet
 from md5 import md5
 from libxml2 import parseDoc
+import re
 
 # There's a right way to do this.  I'm not doing it.
 
@@ -44,7 +45,7 @@ def Request(command, **args):
 ##########
 
 def RqLogin(line):
-    # Line should be Firstname Lastname Password
+    "Login firstname lastname password"
     args=line.split(' ',2)
     return Request("Login",
                    FirstName=args[0],
@@ -56,13 +57,16 @@ def RqLogin(line):
                    ClientName='Whispering Fingers')
 
 
-logoutmsg=Request('Logout')
+def RqLogout(line):
+    "Logout"
+    return Request('Logout')
 
 friendslistmsg=Request('FriendsList')
 
 pongmsg=Request('Pong')
 
 def RqIm(line):
+    "Im UUID Message\nIf a name is used instead of UUID, use firstname.lastname"
     [UUID, message]=line.split(' ',1)
     return Request('InstantMessageSend',
                    UUID=namelist.get(UUID.replace("*"," "), UUID),
@@ -75,37 +79,46 @@ def chatSend(message, channel=0):
                    ChatType='normal')
 
 def friendRequest(UUID, message="Will you be my friend?"):
+    "Friendrequest UUID [message]"
     return Request('FriendRequest',
                    UUID=UUID,
                    Message=message)
 
 def avatarProfile(UUID):
     return Request('AvatarProfile',
-                   UUID=namelist.get(UUID.replace('*',' '),UUID))
+                   UUID=namelist.get(UUID.replace('.',' '),UUID))
 
-def avsearchmsg(name):
+def RqSearch(name):
+    "Search name"
     return Request('SearchAvatar',
                    Name=name)
 
-def tpacceptmsg(name):
+def RqTpaccept(name):
+    "Tpaccept UUID\nIf using name instead of UUID, use firstname.lastname"
     return Request('TeleportAccept',
-                   UUID=namelist.get(UUID.replace('*', ' '),UUID))
+                   UUID=namelist.get(name.replace('.', ' '),name))
 
-def teleportmsg(sim, x, y, z):
+def RqTeleport(line):
+    "Teleport Sim X Y Z"
+    [sim, x, y, z]=line.split(' ')
     return Request('TeleportLocal',
                    X=x, Y=y, Z=z,
                    SimName=sim)
 
-def tpluremsg(UUID, msg="Please join me"):
+def RqTplure(line):
+    "Tplure UUID [message]"
+    [name, msg]=line.split(' ', 1)
     return Request('TeleportLure',
-                   UUID=namelist.get(UUID.replace('*',' '),UUID),
+                   UUID=namelist.get(name.replace('.',' '),name),
                    Message=(msg or 'Please join me'))
 
 currentLocationmsg=Request('CurrentLocation')
 
 gohomemsg=Request('TeleportHome')
 
-def acceptTos(firstname, lastname, decision):
+def RqAccepttos(line):
+    "Accepttos firstname lastname true/false"
+    [firstname, lastname, decision]=line.split(' ')
     return Request('AcceptTos',
                    FirstName=firstname, LastName=lastname,
                    Accept=decision)
@@ -300,20 +313,29 @@ if __name__ == '__main__':
             line=sys.stdin.readline() # no strip; trailing spaces might be needed.
             # But lose the newline.
             line=line[:-1]
-            args=line.split(" ")
-            cmd=args[0]
-	    # Extend by '' to avoid exception if too short.
-            rest=(line.split(' ',1)+[''])[1]
-	    linetail=(line.split(" ",2)+['',''])[2]
+            channel=0
+            match=re.match('(/?/?)(\d*\s*)(.*)', line)
+            if match.group(1)=='/':
+                if match.group(2):
+                    channel=int(match.group(2))
+                    cmd='Say'
+                    rest=match.group(3)
+                else:
+                    # A little legerdemain to get the right size
+                    [cmd,rest]=(match.group(3).split(' ',1)+[''])[:2]
+            elif match.group(1)=='//':
+                cmd='Say'
+                rest=line[1:]
+            else:
+                cmd='Say'
+                rest=line
             outmsg=None
             rq="Rq"+cmd.title()
             if globals().has_key(rq):
                 outmsg=(globals()[rq])(rest)
-            elif cmd == 'namelist': # lowercase: local command.
+            elif cmd == 'namelist':
                 shownamelist()
                 continue
-            elif cmd == 'Logout':
-                outmsg=logoutmsg
             elif cmd == 'Friends':
                 outmsg = friendslistmsg
             elif cmd == 'Home':
@@ -322,22 +344,12 @@ if __name__ == '__main__':
                 outmsg=pongmsg
             elif cmd == 'Location':
                 outmsg=currentLocationmsg
-            elif cmd == 'Search':
-                outmsg=avsearchmsg(line.split(' ',1)[1])
-            elif cmd == 'TPAccept':
-                outmsg=tpacceptmsg(args[1])
-            elif cmd == 'Teleport':
-                outmsg=teleportmsg(args[1], args[2], args[3], args[4]) # sim, x, y, z
-            elif cmd == 'TPLure':
-                # Extending by [''] to prevent exception if not enough data
-                outmsg=tpluremsg(args[1], linetail)
-            elif cmd == 'AcceptTos':
-                outmsg=acceptTos(args[1], args[2], args[3])
-            elif cmd in ['Quit', 'Exit']:
-                Quit()
-            elif re.match(r'(\d*)Say',cmd):
-                outmsg = chatSend(line.split(' ',1)[1], 
-                                  (int(re.match(r'(\d*)Say',cmd).group(1)) or 0))
+            elif cmd in ['Quit', 'Exit', 'quit', 'exit']:
+                    Quit()
+            elif cmd == 'Say':
+                if not rest:    # Nothing to say.
+                    continue
+                outmsg = chatSend(rest, channel)
             else:
                 print "??"
                 outmsg=cmd          # Escape clause to type whatever we want.
