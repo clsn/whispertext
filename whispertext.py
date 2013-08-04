@@ -62,9 +62,11 @@ def RqLogout(line):
     return Request('Logout')
 
 def RqFriends(line):
+    "FriendsList"
     return Request('FriendsList')
 
 def RqPong(line):
+    "Pong"
     return Request('Pong')
 
 def RqIm(line):
@@ -75,6 +77,7 @@ def RqIm(line):
                    Message=message)
 
 def chatSend(message, channel=0):
+    "[/channel] message"
     return Request('ChatSend',
                    Message=message,
                    Channel=channel,
@@ -82,16 +85,17 @@ def chatSend(message, channel=0):
 
 def friendRequest(UUID, message="Will you be my friend?"):
     "Friendrequest UUID [message]"
-    return Request('FriendRequest',
+    return Request('FriendshipRequest',
                    UUID=UUID,
                    Message=message)
 
 def avatarProfile(UUID):
+    "Avatarprofile UUID (or firstname.lastname)"
     return Request('AvatarProfile',
                    UUID=namelist.get(UUID.replace('.',' '),UUID))
 
-def RqSearch(name):
-    "Search name"
+def RqAvatarsearch(name):
+    "Searchavatar name"
     return Request('SearchAvatar',
                    Name=name)
 
@@ -101,8 +105,8 @@ def RqTpaccept(name):
                    UUID=namelist.get(name.replace('.', ' '),name))
 
 def RqTeleport(line):
-    "Teleport Sim X Y Z"
-    [sim, x, y, z]=line.split(' ')
+    "Teleport X Y Z Sim"
+    [x, y, z, sim]=line.split(' ',3) # Sim names can have spaces in them.
     return Request('TeleportLocal',
                    X=x, Y=y, Z=z,
                    SimName=sim)
@@ -115,13 +119,16 @@ def RqTplure(line):
                    Message=(msg or 'Please join me'))
 
 def RqLocation(line):
+    "CurrentLocation"
     return Request('CurrentLocation')
 
 def RqHome(line):
+    "TeleportHome"
     return Request('TeleportHome')
 
 def RqAccepttos(line):
     "Accepttos firstname lastname true/false"
+    # Not needed often, but you can't log on without it when it's needed!
     [firstname, lastname, decision]=line.split(' ')
     return Request('AcceptTos',
                    FirstName=firstname, LastName=lastname,
@@ -132,6 +139,7 @@ def RqAccepttos(line):
 ###########
 
 def RespChat(tree):
+    "Chat received"
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"FromName")
     sourcetype=dataval(tree,"SourceType")
@@ -142,6 +150,7 @@ def RespChat(tree):
     return '[%s]: %s'%(speaker,msg)
 
 def RespFriendsList(tree):
+    "Friends list"
     friendlist=''
     for elt in tree.xpathEval("//Friend"):
         status=elt.xpathEval("Status")[0].content
@@ -154,43 +163,52 @@ def RespFriendsList(tree):
     return "Friends:\n%s"%friendlist
 
 def RespInstantMessage(tree):
+    "Instant Message received"
     msg=dataval(tree,"Message")
     speaker=dataval(tree,"Name")
     namelist[speaker]=dataval(tree,"UUID")
     return "[*IM* %s]: %s"%(speaker, msg)
 
 def RespTeleportOffer(tree):
+    "Teleport offer received"
     name=dataval(tree,"Name")
     msg=dataval(tree,"Message")
     return "((%s wants to teleport us somewhere: %s))"%(name, msg)
 
 def RespDisconnect(tree):
+    "Disconnected"
     return "Disconnected: %s (%s)"%(dataval(tree,"Reason"),
                                     dataval(tree,"Message"))
 
 def RespMessageBox(tree):
+    "Message box received"
     return "]] %s: %s"%(dataval(tree,"Severity"),
                         dataval(tree,"Message"))
 
 def RespGroupMessage(tree):
+    "Group message received"
     return "(Group message) %s: %s"%(dataval(tree,"Name"),
                                      dataval(tree,"Message"));
 
 def RespGroupNotice(tree):
+    "Group notice received"
     return "((Group Notice)): (%s) %s: %s"%(dataval(tree,"Name"),
                                             dataval(tree,"Subject"),
                                             dataval(tree,"Message"))
 
 def RespCurrentLocation(tree):
+    "Current location received"
     return "Location: %s (%s, %s, %s)"%(dataval(tree,"SimName"),
                                         dataval(tree,"X"),
                                         dataval(tree,"Y"),
                                         dataval(tree,"Z"))
 
 def RespCurrentParcel(tree):
+    "Current parcel info received"
     return "Parcel: %s"%dataval(tree,"Name")
 
 def RespAvatarProfile(tree):
+    "Avatar profile received"
     UUID=dataval(tree,"AvatarUUID")
     name=dataval(tree,"AvatarName")
     online=dataval(tree,"IsOnline")
@@ -198,6 +216,7 @@ def RespAvatarProfile(tree):
     return "%s (%s) online: %s"%(name, UUID, online) # That's what I cared about anyway.
 
 def RespAvatarStatusChange(tree):
+    "Avatar status change notice received"
     UUID=dataval(tree,"UUID")
     name=dataval(tree,"Name")
     status=dataval(tree,"Status")
@@ -205,6 +224,7 @@ def RespAvatarStatusChange(tree):
     return "> %s (%s) is now %s."%(name, UUID, status)
 
 def RespAvatarSearchResult(tree):
+    "Avatar search results received"
     rv="Avatar Search Results:\n"
     for elt in tree.xpathEval("//Result"):
         name=elt.xpathEval("Name")[0].content
@@ -214,6 +234,7 @@ def RespAvatarSearchResult(tree):
     return rv
 
 def RespGroupList(tree):
+    "Group list received"
     # This shows up on every login, might as well format it.
     rv="Groups:\n"
     lineend=False;
@@ -227,18 +248,34 @@ def RespGroupList(tree):
         lineend = not lineend
     return rv
 
+def RespNearbyAvatar(tree):
+    "Information about nearby avatar received"
+    rv="Nearby Avatar:\n"
+    rv+="\tName:\t%s (%s)\n"%(dataval(tree,"Name"), dataval(tree,"UUID"))
+    namelist[dataval(tree,"Name")]=dataval(tree,"UUID")
+    rv+="\t\tDistance:\t%s\n"%dataval(tree,"Distance")
+    rv+="\t\tSex:\t%s\n"%dataval(tree,"Sex")
+    rv+="\t\tPresent:\t%s\n"%dataval(tree, "Present")
+    return rv
+
+def RespBalanceChange(tree):
+    "Balance change"
+    return "Balance changed: %s\n"%dataval(tree,"Message")
+
 def formatDefault(tree):
     return tree.__str__()
 
 ##########################################################
 
 def shownamelist():
+    "Show the cache of name/UUID mapping known"
     print "Known names: "
     for (name, uuid) in namelist.iteritems():
         print "\t%s\t==\t%s"%(name, uuid)
         print
 
 def keepReading(tn):
+    "Loop reading"
     while True:
         z=tn.read_until("</Response>") # Block if necessary.
         presentResponse(z)
@@ -246,12 +283,14 @@ def keepReading(tn):
             tn.write(RqPong(None)+"\n")
 
 def Quit(*args):
+    "Exit"
     import sys
     print "Exiting, right??"
     os.kill(os.getpid(),1)
     sys.exit(0)
 
 def presentResponse(s):
+    "Format (if possible) and show response received to user"
     if logfd:
         logfd.write(s+"\n")
     try:
