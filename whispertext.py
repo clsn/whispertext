@@ -6,6 +6,7 @@ from telnetlib import Telnet
 from md5 import md5
 from libxml2 import parseDoc
 import re
+import readline
 
 # There's a right way to do this.  I'm not doing it.
 
@@ -282,6 +283,13 @@ def keepReading(tn):
         if z.find("Ping")>=0:
             tn.write(RqPong(None)+"\n")
 
+def completer(text, state):
+    # print "Calling completer (%s,%d)"%(text,state)
+    completions=[s[2:] for s in filter((lambda x: x.startswith('Rq'+text.title())),globals().keys())]
+    completions+=[s for s in filter((lambda x: x.startswith(text)), [n.replace(' ','.') for n in namelist.keys()])]
+    # print "(((%s)))"%str(completions)
+    return completions[state]
+
 def Quit(*args):
     "Exit"
     import sys
@@ -304,7 +312,6 @@ def presentResponse(s):
     handlers={
         'Error':
             (lambda tree: "!!Error: %s!!"%dataval(tree,"Error")),
-        # Should have side effect of learning UUIDs
         'TypingStatusChange': (lambda x: ''),
         'Ping': (lambda x: ''),
         }
@@ -318,7 +325,7 @@ def presentResponse(s):
     except Exception as e:
         print "!Exception "+str(e)+"!: "+s
     if msg:
-        print '==\n%s\n=='%msg
+        print '%s\n=='%msg
         
 if __name__ == '__main__':
     import re
@@ -334,14 +341,14 @@ if __name__ == '__main__':
         outname=str(datetime.now())
         logfd=open(outname,"w")
     tn=Telnet('localhost', port)
+    readline.parse_and_bind('tab: complete')
+    readline.set_completer(completer)
     while True:
         try:
             if not thread or not thread.isAlive():
                 thread=threading.Thread(target=keepReading, args=(tn,))
                 thread.start()
-            line=sys.stdin.readline() # no strip; trailing spaces might be needed.
-            # But lose the newline.
-            line=line[:-1]
+            line=raw_input('>>> ')
             channel=0
             match=re.match('(/?/?)(\d*\s*)(.*)', line)
             if match.group(1)=='/':
@@ -371,9 +378,10 @@ if __name__ == '__main__':
                 if not rest:    # Nothing to say.
                     continue
                 outmsg = chatSend(rest, channel)
+            elif cmd == 'raw':
+                outmsg=rest          # Escape clause to type whatever we want.
             else:
-                print "??"
-                outmsg=cmd          # Escape clause to type whatever we want.
+                print "??"      # Ignore what we don't understand.
             if outmsg:
                 outmsg=outmsg.encode('utf-8')
                 print "\t"+outmsg
