@@ -84,18 +84,24 @@ def chatSend(message, channel=0):
                    Channel=channel,
                    ChatType='normal')
 
-def friendRequest(UUID, message="Will you be my friend?"):
+def RqFriendrequest(line):
     "Friendrequest UUID [message]"
+    pieces=line.split(' ',1)
+    UUID=namelist.get(pieces[0].replace(".", " "),pieces[0])
+    try:
+        message=pieces[1] or "Will you be my friend?"
+    except IndexError:
+        message="Will you be my friend?"
     return Request('FriendshipRequest',
                    UUID=UUID,
                    Message=message)
 
-def avatarProfile(UUID):
+def RqAvatarprofile(UUID):
     "Avatarprofile UUID (or firstname.lastname)"
     return Request('AvatarProfile',
                    UUID=namelist.get(UUID.replace('.',' '),UUID))
 
-def RqAvatarsearch(name):
+def RqSearchavatar(name):
     "Searchavatar name"
     return Request('SearchAvatar',
                    Name=name)
@@ -240,10 +246,12 @@ def RespGroupList(tree):
     rv="Groups:\n"
     lineend=False;
     # Try for a 2-column effect.
+    cols=(os.getenv('COLUMNS') or 80)
+    width=(cols-10)/2
     for elt in tree.xpathEval("//Group"):
         grouplist[elt.xpathEval("Name")[0].content] = \
             elt.xpathEval("UUID")[0].content
-        rv+="\t"+elt.xpathEval("Name")[0].content
+        rv+=("     %-"+str(width)+"s")%elt.xpathEval("Name")[0].content
         if lineend:
             rv+="\n"
         lineend = not lineend
@@ -252,10 +260,10 @@ def RespGroupList(tree):
 def RespNearbyAvatar(tree):
     "Information about nearby avatar received"
     rv="Nearby Avatar:\n"
-    rv+="\tName:\t%s (%s)\n"%(dataval(tree,"Name"), dataval(tree,"UUID"))
     namelist[dataval(tree,"Name")]=dataval(tree,"UUID")
+    rv+="\tName:\t%s (%s)\n"%(dataval(tree,"Name"), dataval(tree,"UUID"))
     rv+="\t\tDistance:\t%s\n"%dataval(tree,"Distance")
-    rv+="\t\tSex:\t%s\n"%dataval(tree,"Sex")
+    rv+="\t\tSex:\t\t%s\n"%dataval(tree,"Sex")
     rv+="\t\tPresent:\t%s\n"%dataval(tree, "Present")
     return rv
 
@@ -264,7 +272,8 @@ def RespBalanceChange(tree):
     return "Balance changed: %s\n"%dataval(tree,"Message")
 
 def formatDefault(tree):
-    return tree.__str__()
+    return "((Ignoring: %s))"%(tree.xpathEval("/*/Reply")[0].content)
+    # return tree.__str__()
 
 ##########################################################
 
@@ -293,7 +302,7 @@ def completer(text, state):
 def Quit(*args):
     "Exit"
     import sys
-    print "Exiting, right??"
+    print "Exiting."
     os.kill(os.getpid(),1)
     sys.exit(0)
 
@@ -336,10 +345,10 @@ if __name__ == '__main__':
         if opt[0]=='-l':
             outname=opt[1]
             logfd=open(outname,"w") # w+?
-    if not logfd:
-        from datetime import datetime
-        outname=str(datetime.now())
-        logfd=open(outname,"w")
+#    if not logfd:
+#        from datetime import datetime
+#        outname=str(datetime.now())
+#        logfd=open(outname,"w")
     tn=Telnet('localhost', port)
     readline.parse_and_bind('tab: complete')
     readline.set_completer(completer)
@@ -384,12 +393,11 @@ if __name__ == '__main__':
                 print "??"      # Ignore what we don't understand.
             if outmsg:
                 outmsg=outmsg.encode('utf-8')
-                print "\t"+outmsg
+                # print "\t"+outmsg
                 tn.write(outmsg+"\n")
                 if logfd:
                     logfd.write(outmsg+"\n")
                 print "\n"
-            print "---\n"
         except Exception as e:
             print "Exception in I/O: " + str(e)
         except KeyboardInterrupt as e:
