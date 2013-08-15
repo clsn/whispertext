@@ -351,6 +351,7 @@ if __name__ == '__main__':
 #        logfd=open(outname,"w")
     tn=Telnet('localhost', port)
     readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('C-l: redraw-current-line')
     readline.set_completer(completer)
     while True:
         try:
