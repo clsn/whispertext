@@ -5,10 +5,9 @@ import sys
 from telnetlib import Telnet
 from md5 import md5
 from libxml2 import parseDoc
+from cmd import Cmd
 import re
 import readline
-
-# There's a right way to do this.  I'm not doing it.
 
 port=8338                       # Insecure connections.  I'm an insecure guy.
 
@@ -45,101 +44,161 @@ def Request(command, **args):
 # Requests
 ##########
 
-def RqLogin(line):
-    "Login firstname lastname password"
-    args=line.split(' ',2)
-    return Request("Login",
-                   FirstName=args[0],
-                   LastName=args[1],
-                   Password="$1$%s"%md5(args[2]).hexdigest(),
-                   StartLocation='last',
-                   SimName=None,
-                   X=None, Y=None, Z=None,
-                   ClientName='Whispering Fingers')
+class WhisCmd(Cmd):
+    tn=None
+    logfd=None
+
+    # To get / commands, we need to tweak the incoming line.
+    def precmd(self, line):
+        if line.startswith('/'):
+            match=re.match('/(\d+)(.*)', line)
+            if line.startswith('//'):
+                return 'say 0 ' + line[1:]
+            elif match and match.group(1):
+                return 'say ' + match.group(1) + ' ' + match.group(2)
+            else:
+                return line[1:] # expose the command
+        else:
+            return 'say 0 ' + line
+
+    def sendit(self, txt):
+        txt=txt.encode('utf-8')
+        # print "\t"+outmsg
+        self.tn.write(txt+"\n")
+        if self.logfd:
+            self.logfd.write(txt+"\n")
+        print "\n"
+        return None
 
 
-def RqLogout(line):
-    "Logout"
-    return Request('Logout')
+    # Don't repeat yourself
+    def emptyline(self, *args):
+        return None
 
-def RqFriends(line):
-    "FriendsList"
-    return Request('FriendsList')
+    def do_login(self,line):
+        "Login firstname lastname password"
+        args=line.split(' ',2)
+        return self.sendit(Request("Login",
+                                   FirstName=args[0],
+                                   LastName=args[1],
+                                   Password="$1$%s"%md5(args[2]).hexdigest(),
+                                   StartLocation='last',
+                                   SimName=None,
+                                   X=None, Y=None, Z=None,
+                                   ClientName='Whispering Fingers'))
+    
+    
+    def do_logout(self,line):
+        "Logout"
+        return self.sendit(Request('Logout'))
+    
+    def do_friends(self,line):
+        "FriendsList\nShow list of friends."
+        return self.sendit(Request('FriendsList'))
+    
+    def completedefault(self, text, line, begidx, endidx):
+        return [s for s in filter((lambda x: x.startswith(text)), [n.replace(' ','.') for n in namelist.keys()])]
 
-def RqPong(line):
-    "Pong"
-    return Request('Pong')
+    def do_im(self,line):
+        "Im UUID Message\nIf a name is used instead of UUID, use firstname.lastname"
+        [UUID, message]=line.split(' ',1)
+        return self.sendit(Request('InstantMessageSend',
+                                   UUID=namelist.get(UUID.replace("."," "), UUID),
+                                   Message=message))
 
-def RqIm(line):
-    "Im UUID Message\nIf a name is used instead of UUID, use firstname.lastname"
-    [UUID, message]=line.split(' ',1)
-    return Request('InstantMessageSend',
-                   UUID=namelist.get(UUID.replace("."," "), UUID),
-                   Message=message)
+    
+    def do_say(self,message):
+        if not message.strip():
+            raise ValueError
+            return None         # Nothing to say.
+        try:
+            (channel, message)=message.split(' ', 1)
+        except ValueError:
+            channel="0"
+        # Just in case
+        if not channel.isdigit():
+            message = channel + ' ' + message
+            channel='0'
+        message=message.strip()
+        return self.sendit(Request('ChatSend',
+                                   Message=message,
+                                   Channel=channel,
+                                   ChatType='normal'))
+    
+    def do_friendrequest(self,line):
+        "Friendrequest UUID [message]\nSend Friend request to UUID (or firstname.lastname)"
+        pieces=line.split(' ',1)
+        UUID=namelist.get(pieces[0].replace(".", " "),pieces[0])
+        try:
+            message=pieces[1] or "Will you be my friend?"
+        except IndexError:
+            message="Will you be my friend?"
+            return self.sendit(Request('FriendshipRequest',
+                                       UUID=UUID,
+                                       Message=message))
+        
+    def do_avatarprofile(self,UUID):
+        "Avatarprofile UUID (or firstname.lastname)\nCheck if avatar is online."
+        return self.sendit(Request('AvatarProfile',
+                                   UUID=namelist.get(UUID.replace('.',' '),UUID)))
+    
+    def do_searchavatar(self,name):
+        "Searchavatar name\nSearch for an avatar name."
+        return self.sendit(Request('SearchAvatar',
+                                   Name=name))
+    
+    def do_tpaccept(self,name):
+        "Tpaccept UUID\nIf using name instead of UUID, use firstname.lastname"
+        return self.sendit(Request('TeleportAccept',
+                       UUID=namelist.get(name.replace('.', ' '),name)))
 
-def chatSend(message, channel=0):
-    "[/channel] message"
-    return Request('ChatSend',
-                   Message=message,
-                   Channel=channel,
-                   ChatType='normal')
+    def do_teleport(self,line):
+        "Teleport X Y Z Sim"
+        [x, y, z, sim]=line.split(' ',3) # Sim names can have spaces in them.
+        return self.sendit(Request('TeleportLocal',
+                                   X=x, Y=y, Z=z,
+                                   SimName=sim))
+    
+    def do_tplure(self,line):
+        "Tplure UUID [message]\nSend TP invite to UUID (or firstname.lastname)"
+        [name, msg]=line.split(' ', 1)
+        return self.sendit(Request('TeleportLure',
+                                   UUID=namelist.get(name.replace('.',' '),name),
+                                   Message=(msg or 'Please join me')))
+    
+    def do_location(self,line):
+        "Location\nGet information about current location."
+        return self.sendit(Request('CurrentLocation'))
+    
+    def do_home(self,line):
+        "Home\nTeleport home"
+        return self.sendit(Request('TeleportHome'))
+    
+    def do_accepttos(self,line):
+        "Accepttos firstname lastname true/false"
+        # Not needed often, but you can't log on without it when it's needed!
+        [firstname, lastname, decision]=line.split(' ')
+        return self.sendit(Request('AcceptTos',
+                                   FirstName=firstname, LastName=lastname,
+                                   Accept=decision))
 
-def RqFriendrequest(line):
-    "Friendrequest UUID [message]"
-    pieces=line.split(' ',1)
-    UUID=namelist.get(pieces[0].replace(".", " "),pieces[0])
-    try:
-        message=pieces[1] or "Will you be my friend?"
-    except IndexError:
-        message="Will you be my friend?"
-    return Request('FriendshipRequest',
-                   UUID=UUID,
-                   Message=message)
+    def do_namelist(self,line):
+        "Namelist\nShow currently known list of names/UUIDs"
+        shownamelist()
 
-def RqAvatarprofile(UUID):
-    "Avatarprofile UUID (or firstname.lastname)"
-    return Request('AvatarProfile',
-                   UUID=namelist.get(UUID.replace('.',' '),UUID))
+    def do_raw(self,line):
+        "Raw <xml text>\nSend XML text unaltered."
+        return self.sendit(line)
 
-def RqSearchavatar(name):
-    "Searchavatar name"
-    return Request('SearchAvatar',
-                   Name=name)
+    def do_EOF(self, *args):
+        "Exit"
+        import sys
+        print "Exiting."
+        os.kill(os.getpid(),1)
+        sys.exit(0)
 
-def RqTpaccept(name):
-    "Tpaccept UUID\nIf using name instead of UUID, use firstname.lastname"
-    return Request('TeleportAccept',
-                   UUID=namelist.get(name.replace('.', ' '),name))
-
-def RqTeleport(line):
-    "Teleport X Y Z Sim"
-    [x, y, z, sim]=line.split(' ',3) # Sim names can have spaces in them.
-    return Request('TeleportLocal',
-                   X=x, Y=y, Z=z,
-                   SimName=sim)
-
-def RqTplure(line):
-    "Tplure UUID [message]"
-    [name, msg]=line.split(' ', 1)
-    return Request('TeleportLure',
-                   UUID=namelist.get(name.replace('.',' '),name),
-                   Message=(msg or 'Please join me'))
-
-def RqLocation(line):
-    "CurrentLocation"
-    return Request('CurrentLocation')
-
-def RqHome(line):
-    "TeleportHome"
-    return Request('TeleportHome')
-
-def RqAccepttos(line):
-    "Accepttos firstname lastname true/false"
-    # Not needed often, but you can't log on without it when it's needed!
-    [firstname, lastname, decision]=line.split(' ')
-    return Request('AcceptTos',
-                   FirstName=firstname, LastName=lastname,
-                   Accept=decision)
+    do_quit=do_EOF
+    do_exit=do_EOF
 
 ##########################################################
 # Responses
@@ -199,7 +258,7 @@ def RespGroupMessage(tree):
 
 def RespGroupNotice(tree):
     "Group notice received"
-    return "((Group Notice)): (%s) %s: %s"%(dataval(tree,"Name"),
+    return "((Group Notice)): (%s) %s: %s"%(dataval(tree,"AgentName"),
                                             dataval(tree,"Subject"),
                                             dataval(tree,"Message"))
 
@@ -271,6 +330,10 @@ def RespBalanceChange(tree):
     "Balance change"
     return "Balance changed: %s\n"%dataval(tree,"Message")
 
+def RqPong(line):
+    "Pong"
+    return Request('Pong')
+
 def formatDefault(tree):
     return "((Ignoring: %s))"%(tree.xpathEval("/*/Reply")[0].content)
     # return tree.__str__()
@@ -282,7 +345,7 @@ def shownamelist():
     print "Known names: "
     for (name, uuid) in namelist.iteritems():
         print "\t%s\t==\t%s"%(name, uuid)
-        print
+    print
 
 def keepReading(tn):
     "Loop reading"
@@ -298,13 +361,6 @@ def completer(text, state):
     completions+=[s for s in filter((lambda x: x.startswith(text)), [n.replace(' ','.') for n in namelist.keys()])]
     # print "(((%s)))"%str(completions)
     return completions[state]
-
-def Quit(*args):
-    "Exit"
-    import sys
-    print "Exiting."
-    os.kill(os.getpid(),1)
-    sys.exit(0)
 
 def presentResponse(s):
     "Format (if possible) and show response received to user"
@@ -353,53 +409,15 @@ if __name__ == '__main__':
     readline.parse_and_bind('tab: complete')
     readline.parse_and_bind('C-l: redraw-current-line')
     readline.set_completer(completer)
+    repl=WhisCmd()
+    repl.tn=tn
+    repl.logfd=logfd
+    repl.prompt='>>> '
+    thread=threading.Thread(target=keepReading, args=(tn,))
+    thread.start()
+    # Loop in a loop, lest an exception happen.
     while True:
         try:
-            if not thread or not thread.isAlive():
-                thread=threading.Thread(target=keepReading, args=(tn,))
-                thread.start()
-            line=raw_input('>>> ')
-            channel=0
-            match=re.match('(/?/?)(\d*\s*)(.*)', line)
-            if match.group(1)=='/':
-                if match.group(2):
-                    channel=int(match.group(2))
-                    cmd='Say'
-                    rest=match.group(3)
-                else:
-                    # A little legerdemain to get the right size
-                    [cmd,rest]=(match.group(3).split(' ',1)+[''])[:2]
-            elif match.group(1)=='//':
-                cmd='Say'
-                rest=line[1:]
-            else:
-                cmd='Say'
-                rest=line
-            outmsg=None
-            rq="Rq"+cmd.title()
-            if globals().has_key(rq):
-                outmsg=(globals()[rq])(rest)
-            elif cmd == 'namelist':
-                shownamelist()
-                continue
-            elif cmd in ['Quit', 'Exit', 'quit', 'exit']:
-                    Quit()
-            elif cmd == 'Say':
-                if not rest:    # Nothing to say.
-                    continue
-                outmsg = chatSend(rest, channel)
-            elif cmd == 'raw':
-                outmsg=rest          # Escape clause to type whatever we want.
-            else:
-                print "??"      # Ignore what we don't understand.
-            if outmsg:
-                outmsg=outmsg.encode('utf-8')
-                # print "\t"+outmsg
-                tn.write(outmsg+"\n")
-                if logfd:
-                    logfd.write(outmsg+"\n")
-                print "\n"
+            repl.cmdloop()
         except Exception as e:
-            print "Exception in I/O: " + str(e)
-        except KeyboardInterrupt as e:
-            print "Keyboard Interrupt: "+str(e)
+            print "Exception: %s"%str(e)
