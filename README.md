@@ -84,4 +84,4 @@ Responses are messages from the SL server (via Whisper), not necessarily in dire
 
 ## Editing and Auto-Completion
 
-Whispertext uses python's version of the readline library to provide you with access to your history (arrow-keys, ^P, ^N, etc) and editing.  There is also some rudimentary auto-complete enabled, where pressing TAB will attempt to complete either a /command or one of the "known" avatar names.  This can be handy when holding an IM conversation; you don't have to retype the person's name each time, just begin it and hit TAB.
+Whispertext uses python's version of the readline library to provide you with access to your history (arrow-keys, ^P, ^N, etc) and editing.  There is also some rudimentary auto-complete enabled, where pressing TAB will attempt to complete one of the "known" avatar names.  This can be handy when holding an IM conversation; you don't have to retype the person's name each time, just begin it and hit TAB.
